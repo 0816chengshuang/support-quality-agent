@@ -7,6 +7,12 @@ are historical, not the current acceptance state.
 
 ## Current public presentation (2026-10-25)
 
+The public docs now include `docs/REQUIREMENTS.md`, a Chinese user-scenario and
+acceptance document. It describes the ticket-review workflow and observable outcomes
+without changing runtime behavior. The root README links to it. This was a
+documentation-only update; previous test and model evidence remains the latest
+runtime evidence until re-run.
+
 The personal repository now has a Chinese-only root README, business-specific design
 and demo narrative, and no embedded screenshots. The business rule corpus and Skill
 instructions are Chinese; citations now use Chinese section anchors (for example,
