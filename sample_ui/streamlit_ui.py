@@ -3,6 +3,7 @@
 import asyncio
 import atexit
 import sys
+import time
 import traceback
 import uuid
 from pathlib import Path
@@ -45,6 +46,15 @@ if "loaded_thread" not in st.session_state:
     st.session_state.loaded_thread = None
 
 
+def format_turn_timing(timing: dict[str, float | None]) -> str:
+    parts = [f"本轮处理 {timing['total_s']:.2f} 秒"]
+    if timing["first_event_s"] is not None:
+        parts.append(f"首个执行事件 {timing['first_event_s']:.2f} 秒")
+    if timing["prepare_s"] is not None:
+        parts.append(f"准备 {timing['prepare_s']:.2f} 秒")
+    return " · ".join(parts)
+
+
 async def process_user_message_stream(
     message: str, user_id: str, session_id: str, llm_provider: str | None, thinking_container, response_container
 ):
@@ -52,6 +62,8 @@ async def process_user_message_stream(
     Process user message through the OpenChatBI graph with real-time updates
     Updates the thinking_container and response_container as processing happens
     """
+    started_at = time.perf_counter()
+    first_event_s = None
     thinking_steps = []
     top_level_step_number = 0
     # Hierarchical counters keyed by stream depth:
@@ -76,6 +88,7 @@ async def process_user_message_stream(
     from openchatbi.observability.tracing import build_run_config
 
     config = build_run_config(user_id=user_id, session_id=session_id)
+    prepare_s = time.perf_counter() - started_at
 
     # Use empty container for real-time updates
     thinking_placeholder = thinking_container.empty()
@@ -102,6 +115,8 @@ async def process_user_message_stream(
         stream_input, config=config, stream_mode=["updates", "messages"], subgraphs=True, debug=True
     ):
         for event in processor.process(namespace, event_type, event_value):
+            if first_event_s is None:
+                first_event_s = time.perf_counter() - started_at
             if isinstance(event, StreamToken):
                 if event.is_final:
                     # Main agent streaming its (intermediate/final) answer.
@@ -192,6 +207,11 @@ async def process_user_message_stream(
         chronological_content += "\n\n"
     chronological_content += "**等待你补充信息。**" if state.interrupts else "**本轮处理结束。**"
     update_display()
+    timing = {
+        "total_s": time.perf_counter() - started_at,
+        "first_event_s": first_event_s,
+        "prepare_s": prepare_s,
+    }
 
     # Extract final answer (last part without tool calls) and display outside thinking
     final_answer_text = extract_final_answer(final_response)
@@ -204,8 +224,9 @@ async def process_user_message_stream(
     with response_container:
         if plot_figure:
             st.plotly_chart(plot_figure, width="stretch", key=str(uuid.uuid4()))
+        st.caption(format_turn_timing(timing))
 
-    return final_response, plot_figure, thinking_steps, chronological_content, final_answer_text
+    return final_response, plot_figure, thinking_steps, chronological_content, final_answer_text, timing
 
 
 async def _load_history_async(user_id: str, session_id: str, llm_provider: str | None) -> list[dict]:
@@ -518,6 +539,8 @@ for msg in st.session_state.messages:
             # Display plot if available (outside thinking container)
             if msg.get("plot_figure"):
                 st.plotly_chart(msg["plot_figure"], width="stretch", key=str(uuid.uuid4()))
+            if msg.get("timing"):
+                st.caption(format_turn_timing(msg["timing"]))
 
     elif msg["type"] == "thinking_message":
         display_message_with_thinking(
@@ -529,6 +552,8 @@ for msg in st.session_state.messages:
                 render_content_with_downloads(msg["content"])
             elif msg["type"] == "plot" and msg.get("plot_figure"):
                 st.plotly_chart(msg["plot_figure"], width="stretch", key=str(uuid.uuid4()))
+            if msg.get("timing"):
+                st.caption(format_turn_timing(msg["timing"]))
 
 # Chat input
 if prompt := st.chat_input("请输入工单统计问题，或补充查询条件…", disabled=not model_configured):
@@ -547,6 +572,7 @@ if prompt := st.chat_input("请输入工单统计问题，或补充查询条件�
         response_container = st.container()
 
         # Process the message asynchronously with real-time updates
+        turn_started_at = time.perf_counter()
         try:
             # Reuse the same event loop to avoid binding issues
             if st.session_state.event_loop is None or st.session_state.event_loop.is_closed():
@@ -554,7 +580,7 @@ if prompt := st.chat_input("请输入工单统计问题，或补充查询条件�
                 asyncio.set_event_loop(st.session_state.event_loop)
 
             loop = st.session_state.event_loop
-            final_response, plot_figure, thinking_steps, full_chronological_content, final_answer = (
+            final_response, plot_figure, thinking_steps, full_chronological_content, final_answer, timing = (
                 loop.run_until_complete(
                     process_user_message_stream(
                         prompt, user_id, session_id, llm_provider, thinking_container, response_container
@@ -575,6 +601,7 @@ if prompt := st.chat_input("请输入工单统计问题，或补充查询条件�
                     "chronological_content": processed_chronological_content,
                     "final_answer": processed_final_answer,
                     "plot_figure": plot_figure,
+                    "timing": timing,
                 }
             )
 
@@ -584,9 +611,17 @@ if prompt := st.chat_input("请输入工单统计问题，或补充查询条件�
         except Exception as e:
             traceback.print_exc()
             st.error(f"请求处理失败：{str(e)}")
+            failure_timing = {
+                "total_s": time.perf_counter() - turn_started_at,
+                "first_event_s": None,
+                "prepare_s": None,
+            }
+            st.caption(format_turn_timing(failure_timing))
             error_content = f"请求处理失败：{str(e)}"
             processed_error_content = process_download_links(error_content)
-            st.session_state.messages.append({"role": "assistant", "type": "text", "content": processed_error_content})
+            st.session_state.messages.append(
+                {"role": "assistant", "type": "text", "content": processed_error_content, "timing": failure_timing}
+            )
 
 
 # Cleanup on session end

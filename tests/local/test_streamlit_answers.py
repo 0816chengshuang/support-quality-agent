@@ -85,12 +85,15 @@ st.session_state.test_result = result
     app = AppTest.from_string(script, default_timeout=60).run()
     assert not app.exception
     result = app.session_state["test_result"]
+    timing = result[5]
+    assert timing["total_s"] >= timing["prepare_s"] >= 0
+    assert timing["first_event_s"] is None
     if interrupted:
-        assert result[-1] == "请补充日期。"
+        assert result[4] == "请补充日期。"
         assert "等待你补充信息" in result[3]
         assert "Analysis complete" not in result[3]
-        assert "[]" not in result[-1]
-        assert "40%" not in result[-1]
+        assert "[]" not in result[4]
+        assert "40%" not in result[4]
     else:
-        assert result[-1] == "整体超时率：40%（4/10）。"
+        assert result[4] == "整体超时率：40%（4/10）。"
         assert any("40%" in markdown.value for markdown in app.markdown)

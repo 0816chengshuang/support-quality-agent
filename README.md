@@ -14,6 +14,19 @@
 | 核对原始表最大编号 | 交给 SQL 专项子流程，展示实际执行语句与结果 | `MAX(id)=15`；不会误用指标的业务排除条件 |
 | 只说“这周超时率” | 先询问明确的 UTC 起止日期 | 不拿旧会话日期冒充本周数据 |
 
+```mermaid
+flowchart LR
+    Q["主管提问"] --> R{"任务识别与条件确认"}
+    R -- "指标" --> M["固定口径计算"]
+    R -- "规则" --> K["资料检索与引用"]
+    R -- "原始记录" --> S["SQL 专项审计"]
+    R -- "缺条件" --> H["澄清并继续"]
+    M --> E["结果与本轮依据"]
+    K --> E
+    S --> E
+    H --> R
+```
+
 上述数字来自 15 条人为设计的边界样本。[需求说明](docs/REQUIREMENTS.md)展示用户场景与验收标准；[设计说明](docs/DESIGN.md)解释各环节职责；[演示脚本](example/support_quality/PROJECT_CASE_STUDY.md)给出逐步操作；[完整操作说明](example/support_quality/README.md)列出数据范围和更多反例。
 
 ## 本地演示
@@ -32,6 +45,8 @@ $env:CONFIG_FILE = (Resolve-Path '.local/support-demo/config.local.yaml').Path
 ```
 
 打开 [本机演示页面](http://127.0.0.1:8501/)，按[演示脚本](example/support_quality/PROJECT_CASE_STUDY.md)依次提问。准备合成数据的命令不会启动网页；如果 `.local/support-demo` 已存在，准备程序会拒绝覆盖。页面沿用仓库原有入口；若安全软件出现告警，应停止并核验，不关闭防护或换入口规避。
+
+每轮回答下方会显示本机实测的总处理与准备耗时；有可展示的执行事件时还会显示首次事件等待。[延迟演示](docs/LATENCY_DEMO.md)给出四轮对比提问、计时口径和现场讲解顺序。
 
 ## 验证范围
 

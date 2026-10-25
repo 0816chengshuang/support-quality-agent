@@ -98,6 +98,9 @@ def test_original_page_statistics_followup_and_new_conversation(configured_page)
     app.chat_input[0].set_value("统计 2026-10-01 到 2026-10-08 超时率").run()
     assert not app.exception and not app.error
     assert "40%" in final_answers(app)[-1]
+    timing = app.session_state["messages"][-1]["timing"]
+    assert timing["total_s"] >= timing["first_event_s"] >= timing["prepare_s"] >= 0
+    assert any("本轮处理" in item.value for item in app.markdown)
     app.chat_input[0].set_value("保持原范围，按类别拆分").run()
     assert not app.exception and not app.error
     assert all(rate in final_answers(app)[-1] for rate in ("75%", "0%", "25%"))

@@ -7,6 +7,19 @@ are historical, not the current acceptance state.
 
 ## Current public presentation (2026-10-25)
 
+The Chinese portfolio now includes Mermaid user/system/latency flows and a
+four-path local latency demonstration. The existing Streamlit page measures
+per-turn in-process total and preparation time with a monotonic clock; it
+shows time to the first parsed execution event only when one exists. Timing
+persists in the active browser session, not in restored checkpoint history.
+The full selected offline regression passed **360 tests in 14.61 seconds**.
+A real local browser turn with the CPU model returned category overdue rates
+3/4, 0/2 and 1/4 and displayed 27.55 s total, 27.51 s first event and
+0.00 s preparation. This is one local sample, not p95, network latency or a
+production target. No paid API request was made in this round. The four-path
+demo script documents further questions; only the category turn was newly
+repeated in a live browser for this timing change.
+
 The public docs now include `docs/REQUIREMENTS.md`, a Chinese user-scenario and
 acceptance document. It describes the ticket-review workflow and observable outcomes
 without changing runtime behavior. The root README links to it. This was a
