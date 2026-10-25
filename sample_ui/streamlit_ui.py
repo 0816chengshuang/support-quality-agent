@@ -21,14 +21,16 @@ from langgraph.types import Command  # noqa: E402
 
 from openchatbi import config as openchatbi_config  # noqa: E402
 from openchatbi.llm.llm import list_llm_providers  # noqa: E402
-from openchatbi.streaming import AgentStreamProcessor, StreamStep, StreamToken  # noqa: E402
+from openchatbi.streaming import AgentStreamProcessor, StreamStep, StreamToken, extract_final_answer  # noqa: E402
 from openchatbi.utils import log  # noqa: E402
 from sample_ui.async_graph_manager import AsyncGraphManager  # noqa: E402
-from sample_ui.history_loader import load_session_history  # noqa: E402
+from sample_ui.history_loader import current_assistant_answer, list_session_summaries, messages_to_ui_history  # noqa: E402
+from sample_ui.localization import step_text_zh  # noqa: E402
 from sample_ui.plotly_utils import visualization_dsl_to_gradio_plot  # noqa: E402
 
 # Configuration
-st.set_page_config(page_title="OpenChatBI - Streamlit Interface", page_icon="💬", layout="wide")
+st.set_page_config(page_title="工单质量分析助手", page_icon="💬", layout="wide", initial_sidebar_state="expanded")
+st.set_option("client.toolbarMode", "minimal")
 
 # Initialize session state
 if "messages" not in st.session_state:
@@ -79,7 +81,7 @@ async def process_user_message_stream(
     thinking_placeholder = thinking_container.empty()
 
     # Build content chronologically - all events in time order
-    base_content = "🔄 **Processing...**\n\n"
+    base_content = "**正在处理…**\n\n"
     chronological_content = ""  # All content in time order
     # Tracks which layer's tokens are currently being appended, so consecutive
     # tokens from the same source are grouped under one header. "main" = main
@@ -105,19 +107,19 @@ async def process_user_message_stream(
                     # Main agent streaming its (intermediate/final) answer.
                     final_response += event.text
                     if current_token_layer != "main":
-                        chronological_content += "\n\n**🤖 AI Response:** "
+                        chronological_content += "\n\n**助手输出：** "
                         current_token_layer = "main"
                 else:
                     # Sub-agent (data analysis) thinking tokens.
                     token_layer = ("think", event.level, event.label)
                     if current_token_layer != token_layer:
-                        chronological_content += f"\n\n{'　' * event.level}💭 *{event.label} Thinking:* "
+                        chronological_content += f"\n\n{'　' * event.level}*子任务执行过程：* "
                         current_token_layer = token_layer
                 chronological_content += event.text
                 update_display()
 
             elif isinstance(event, StreamStep):
-                desc = event.text
+                desc = step_text_zh(event)
 
                 # Building the Plotly figure is UI-specific, so it stays here.
                 # The shared parser hands us the DSL plus the latest CSV data.
@@ -129,9 +131,9 @@ async def process_user_message_stream(
                         continue
                     try:
                         plot_figure, plot_description = visualization_dsl_to_gradio_plot(data_csv, visualization_dsl)
-                        desc = f"📊 Generated visualization: {plot_description}"
+                        desc = f"已生成图表：{plot_description}"
                     except Exception as e:
-                        desc = f"⚠️ Visualization error: {str(e)}"
+                        desc = f"图表生成失败：{str(e)}"
 
                 thinking_steps.append(desc)
                 if chronological_content and not chronological_content.endswith("\n\n"):
@@ -141,7 +143,7 @@ async def process_user_message_stream(
                     step_counters[0] = top_level_step_number
                     # Reset nested counters when entering a new top-level step.
                     step_counters = {k: v for k, v in step_counters.items() if k == 0}
-                    chronological_content += f"**Step {top_level_step_number}:** {desc}\n\n"
+                    chronological_content += f"**步骤 {top_level_step_number}：** {desc}\n\n"
                 else:
                     # Ensure we always have a top-level context, even if a
                     # nested step appears first due to event ordering.
@@ -158,7 +160,7 @@ async def process_user_message_stream(
                     ]
                     hierarchical_step_number = ".".join(step_number_parts)
                     chronological_content += (
-                        f"{'　' * event.level}↳ Step {hierarchical_step_number} " f"[{event.label}] {desc}\n\n"
+                        f"{'　' * event.level}子步骤 {hierarchical_step_number}：{desc}\n\n"
                     )
                 # Reset token grouping so the next streamed tokens get a header.
                 current_token_layer = None
@@ -166,12 +168,15 @@ async def process_user_message_stream(
 
     # Check for interrupts in final state
     state = await graph.aget_state(config)
+    completed_answer = current_assistant_answer((state.values or {}).get("messages"))
+    if completed_answer is not None:
+        final_response = completed_answer
     if state.interrupts:
         log(f"State interrupts: {state.interrupts}")
         output_content = state.interrupts[0].value.get("text", "")
-        if "buttons" in state.interrupts[0].value:
-            output_content += str(state.interrupts[0].value.get("buttons"))
-        final_response += output_content
+        if state.interrupts[0].value.get("buttons"):
+            output_content += "\n" + " / ".join(map(str, state.interrupts[0].value["buttons"]))
+        final_response = output_content
 
         # Append interrupt content to chronological content
         chronological_content += output_content
@@ -185,53 +190,20 @@ async def process_user_message_stream(
     # Add some spacing if the last content didn't end with newlines
     if not chronological_content.endswith("\n\n"):
         chronological_content += "\n\n"
-    chronological_content += "✅ **Analysis complete!**"
+    chronological_content += "**等待你补充信息。**" if state.interrupts else "**本轮处理结束。**"
     update_display()
 
     # Extract final answer (last part without tool calls) and display outside thinking
-    if final_response:
-        # Find the last occurrence of tool usage to separate final answer
-        lines = final_response.split("\n")
-        final_answer_lines = []
-        collecting_final = False
-
-        for line in reversed(lines):
-            if "Use tool:" in line or "Using tools:" in line or "Using tool:" in line:
-                break
-            final_answer_lines.append(line)
-            collecting_final = True
-
-        if collecting_final and final_answer_lines:
-            # Reverse back to correct order
-            final_answer_lines.reverse()
-            final_answer_text = "\n".join(final_answer_lines).strip()
-
-            if final_answer_text:
-                with response_container:
-                    processed_final_answer_text = process_download_links(final_answer_text)
-                    render_content_with_downloads(processed_final_answer_text)
+    final_answer_text = extract_final_answer(final_response)
+    if final_answer_text:
+        with response_container:
+            processed_final_answer_text = process_download_links(final_answer_text)
+            render_content_with_downloads(processed_final_answer_text)
 
     # Final update to response container - only show plot if available (text response is in thinking container)
     with response_container:
         if plot_figure:
             st.plotly_chart(plot_figure, width="stretch", key=str(uuid.uuid4()))
-
-    # Extract final answer for separate storage
-    final_answer_text = ""
-    if final_response:
-        lines = final_response.split("\n")
-        final_answer_lines = []
-        collecting_final = False
-
-        for line in reversed(lines):
-            if "Use tool:" in line or "Using tools:" in line or "Using tool:" in line:
-                break
-            final_answer_lines.append(line)
-            collecting_final = True
-
-        if collecting_final and final_answer_lines:
-            final_answer_lines.reverse()
-            final_answer_text = "\n".join(final_answer_lines).strip()
 
     return final_response, plot_figure, thinking_steps, chronological_content, final_answer_text
 
@@ -241,7 +213,29 @@ async def _load_history_async(user_id: str, session_id: str, llm_provider: str |
     if not st.session_state.graph_manager._initialized:
         await st.session_state.graph_manager.initialize()
     graph = await st.session_state.graph_manager.get_graph(llm_provider)
-    return await load_session_history(graph, user_id, session_id)
+    from openchatbi.observability.tracing import build_run_config
+
+    state = await graph.aget_state(build_run_config(user_id=user_id, session_id=session_id))
+    history = messages_to_ui_history((state.values or {}).get("messages", []))
+    st.session_state.session_interrupts[f"{user_id}-{session_id}"] = bool(state.interrupts)
+    if state.interrupts:
+        question = state.interrupts[0].value.get("text", "")
+        if question and (not history or history[-1].get("content") != question or history[-1]["role"] != "assistant"):
+            history.append({"role": "assistant", "type": "text", "content": question})
+    return history
+
+
+def start_new_conversation() -> None:
+    """Start a fresh checkpoint thread without deleting the old conversation."""
+    st.session_state.session_id = uuid.uuid4().hex[:12]
+    st.session_state.messages = []
+    st.session_state.loaded_thread = None
+
+
+def switch_conversation(session_id: str) -> None:
+    st.session_state.session_id = session_id
+    st.session_state.messages = []
+    st.session_state.loaded_thread = None
 
 
 def restore_history_if_needed(user_id: str, session_id: str, llm_provider: str | None) -> None:
@@ -286,7 +280,7 @@ def get_available_reports() -> list[str]:
 
         return sorted(report_files)
     except Exception as e:
-        st.error(f"Error accessing reports: {str(e)}")
+        st.error(f"读取报告列表失败：{str(e)}")
         return []
 
 
@@ -305,13 +299,13 @@ def get_report_file_content(filename: str) -> tuple[bytes | None, str | None]:
 
         # Security check - ensure file is within report directory
         if not file_path.exists() or not file_path.is_file():
-            st.error(f"Report file not found: {filename}")
+            st.error(f"报告文件不存在：{filename}")
             return None, None
 
         try:
             file_path.resolve().relative_to(report_dir.resolve())
         except ValueError:
-            st.error("Access denied to file")
+            st.error("无权访问此文件")
             return None, None
 
         # Determine MIME type
@@ -334,7 +328,7 @@ def get_report_file_content(filename: str) -> tuple[bytes | None, str | None]:
         return content, mime_type
 
     except Exception as e:
-        st.error(f"Error reading report file: {str(e)}")
+        st.error(f"读取报告失败：{str(e)}")
         return None, None
 
 
@@ -364,9 +358,6 @@ def process_download_links(content: str) -> str:
     processed_content = re.sub(download_pattern, replace_link, content)
 
     # Debug log to see if processing worked
-    if processed_content != content:
-        st.write(f"🔍 Debug: Processed download links - found {content.count('/api/download/report/')} links")
-
     return processed_content
 
 
@@ -390,14 +381,14 @@ def render_content_with_downloads(content: str) -> None:
 
             if file_content is not None:
                 st.download_button(
-                    label=f"📥 Download {filename}",
+                    label=f"下载 {filename}",
                     data=file_content,
                     file_name=filename,
                     mime=mime_type,
                     key=f"inline_download_{filename}_{hash(content)}",
                 )
             else:
-                st.error(f"❌ Could not load report: {filename}")
+                st.error(f"无法加载报告：{filename}")
 
 
 def display_message_with_thinking(
@@ -407,15 +398,15 @@ def display_message_with_thinking(
     with st.chat_message(role):
         if thinking_steps and role == "assistant":
             # Create thinking section with all content inside
-            with st.expander("💭 AI Thinking Process", expanded=False):
+            with st.expander("执行过程", expanded=False):
                 for i, step in enumerate(thinking_steps, 1):
-                    st.markdown(f"**Step {i}:** {step}")
+                    st.markdown(f"**步骤 {i}：** {step}")
 
                 if content:
-                    st.markdown("**🤖 AI Response:**")
+                    st.markdown("**助手输出：**")
                     render_content_with_downloads(content)
 
-                st.success("✅ Analysis complete")
+                st.success("本轮处理结束")
 
         # For non-assistant messages, display content normally
         elif content and role != "assistant":
@@ -427,14 +418,22 @@ def display_message_with_thinking(
 
 
 # Main UI
-st.title("💬 OpenChatBI - Streamlit UI")
-st.markdown("*AI-powered Business Intelligence Chat with Thinking*")
+st.title("工单质量分析助手")
+st.caption("本地演示 · 合成工单数据 · 基于 OpenChatBI")
+
+try:
+    model_configured = openchatbi_config.get().default_llm is not None
+except ValueError:
+    model_configured = False
+
+if not model_configured:
+    st.warning("模型尚未配置，当前无法提交分析请求。")
 
 # Sidebar for configuration
 with st.sidebar:
-    st.header("⚙️ Configuration")
-    user_id = st.text_input("User ID", value="default", help="Unique identifier for the user session")
-    session_id = st.text_input("Session ID", value="default", help="Session identifier for conversation continuity")
+    st.header("对话工作台")
+    user_id = st.text_input("用户标识", value="default", key="user_id", help="演示用的对话归属标识，不是登录凭据")
+    session_id = st.text_input("会话编号", value="default", key="session_id", help="当前对话的编号，历史对话可在下方选择")
 
     # Optional multi-provider support
     llm_provider = None
@@ -446,60 +445,70 @@ with st.sidebar:
             default_provider = None
         default_index = provider_options.index(default_provider) if default_provider in provider_options else 0
         llm_provider = st.selectbox(
-            "LLM Provider",
+            "模型服务",
             options=provider_options,
             index=default_index,
-            help="Select which configured LLM provider to use for this session",
+            help="选择本次对话使用的已配置模型服务",
         )
 
-    st.markdown("---")
-    st.markdown("""
-    **💡 How to use:**
-    - Type your business questions
-    - Watch the AI thinking process in collapsible sections
-    - View generated charts and analyses
-    - Use different session IDs for separate conversations
-    """)
+    st.button("新建对话", on_click=start_new_conversation)
 
-    if st.button("🗑️ Clear Chat History"):
-        st.session_state.messages = []
-        st.rerun()
+    if model_configured:
+        restore_history_if_needed(user_id, session_id, llm_provider)
+    st.subheader("历史对话")
+    sessions = []
+    if model_configured:
+        try:
+            sessions = st.session_state.event_loop.run_until_complete(
+                list_session_summaries(st.session_state.graph_manager.checkpointer, user_id))
+        except Exception as exc:
+            log(f"Failed to list conversations: {exc!r}")
+            st.warning("历史列表暂时加载失败，已有记录未被删除。")
+    for session in sessions:
+        st.button(
+            session["title"], key=f"history_{session['session_id']}",
+            on_click=switch_conversation, args=(session["session_id"],),
+            type="primary" if session["session_id"] == session_id else "secondary",
+            use_container_width=True, help=f"会话编号：{session['session_id']}",
+        )
+    if not sessions:
+        st.caption("暂无历史对话")
 
     st.markdown("---")
-    st.markdown("### 📁 Report Downloads")
+    st.markdown("### 报告文件")
 
     # Get available reports
-    available_reports = get_available_reports()
+    available_reports = get_available_reports() if model_configured else []
 
     if available_reports:
         selected_report = st.selectbox(
-            "Select a report to download:", options=[""] + available_reports, help="Choose a report file to download"
+            "选择报告", options=[""] + available_reports, help="选择需要下载的报告文件"
         )
 
-        if selected_report and st.button("📥 Download Report"):
+        if selected_report and st.button("下载报告"):
             file_content, mime_type = get_report_file_content(selected_report)
             if file_content is not None:
                 st.download_button(
-                    label=f"💾 Save {selected_report}",
+                    label=f"保存 {selected_report}",
                     data=file_content,
                     file_name=selected_report,
                     mime=mime_type,
                     key=f"download_{selected_report}",
                 )
-                st.success(f"✅ {selected_report} is ready for download!")
+                st.success(f"报告已就绪：{selected_report}")
     else:
-        st.info("No reports available for download.")
+        st.caption("暂无报告文件")
 
 # Restore persisted history from the checkpointer when the active thread changes
 # (e.g. page refresh or switching User/Session ID). No-op within the same thread.
-restore_history_if_needed(user_id, session_id, llm_provider)
+# History is restored before rendering the sidebar conversation list.
 
 # Display chat history
 for msg in st.session_state.messages:
     if msg["type"] == "chronological_message":
         # Display chronological content in expander - all collapsed after completion
         with st.chat_message(msg["role"]):
-            with st.expander("💭 AI Thinking Process", expanded=False):
+            with st.expander("执行过程", expanded=False):
                 st.markdown(msg["chronological_content"])
 
             # Extract and display final answer text outside thinking
@@ -522,7 +531,7 @@ for msg in st.session_state.messages:
                 st.plotly_chart(msg["plot_figure"], width="stretch", key=str(uuid.uuid4()))
 
 # Chat input
-if prompt := st.chat_input("Ask me anything about your data..."):
+if prompt := st.chat_input("请输入工单统计问题，或补充查询条件…", disabled=not model_configured):
     # Add user message
     st.session_state.messages.append({"role": "user", "type": "text", "content": prompt})
 
@@ -533,7 +542,7 @@ if prompt := st.chat_input("Ask me anything about your data..."):
     # Process assistant response with real-time streaming
     with st.chat_message("assistant"):
         # Create thinking and response containers
-        thinking_expander = st.expander("💭 AI Thinking Process...", expanded=True)
+        thinking_expander = st.expander("执行过程", expanded=True)
         thinking_container = thinking_expander.container()
         response_container = st.container()
 
@@ -574,27 +583,28 @@ if prompt := st.chat_input("Ask me anything about your data..."):
 
         except Exception as e:
             traceback.print_exc()
-            st.error(f"❌ Error processing request: {str(e)}")
-            error_content = f"❌ Error: {str(e)}"
+            st.error(f"请求处理失败：{str(e)}")
+            error_content = f"请求处理失败：{str(e)}"
             processed_error_content = process_download_links(error_content)
             st.session_state.messages.append({"role": "assistant", "type": "text", "content": processed_error_content})
 
 
 # Cleanup on session end
-def cleanup_session():
+def cleanup_session(graph_manager, event_loop):
     """Cleanup resources when session ends"""
-    if "graph_manager" in st.session_state:
-        try:
-            # Use the same event loop for cleanup
-            if st.session_state.event_loop and not st.session_state.event_loop.is_closed():
-                loop = st.session_state.event_loop
-                loop.run_until_complete(st.session_state.graph_manager.cleanup())
-                loop.close()
-                st.session_state.event_loop = None
-        except Exception as e:
-            log(f"Error during session cleanup: {e}")
+    # Exit callbacks run without a Streamlit session context.
+    if event_loop is None or event_loop.is_closed() or event_loop.is_running():
+        return
+    try:
+        event_loop.run_until_complete(graph_manager.cleanup())
+    except Exception as e:
+        log(f"Error during session cleanup: {e}")
+    finally:
+        event_loop.close()
 
 
 # Register cleanup (this is a simplified approach - in production you might want more robust cleanup)
 
-atexit.register(cleanup_session)
+if model_configured and not st.session_state.get("cleanup_registered", False):
+    atexit.register(cleanup_session, st.session_state.graph_manager, st.session_state.event_loop)
+    st.session_state.cleanup_registered = True

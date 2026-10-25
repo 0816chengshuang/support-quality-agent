@@ -220,3 +220,10 @@ openspec
 .cursor
 .claude
 chroma_db_new
+
+# Local credentials, logs and generated state
+.env.*
+!.env.example
+/.local/
+/.run/
+/.chroma_db/

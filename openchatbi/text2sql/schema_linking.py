@@ -1,5 +1,6 @@
 """Schema linking module for table and column selection in text2sql."""
 
+import json
 import traceback
 from datetime import datetime
 from typing import Any
@@ -7,13 +8,47 @@ from typing import Any
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from openchatbi import config
 from openchatbi.catalog import CatalogStore
 from openchatbi.catalog.schema_retrival import col_dict, column_tables_mapping, get_relevant_columns
 from openchatbi.constants import datetime_format
 from openchatbi.graph_state import SQLGraphState
+from openchatbi.llm.llm import get_llm_max_attempts
 from openchatbi.prompts.system_prompt import get_table_selection_prompt_template
 from openchatbi.text2sql.data import table_selection_example_dict, table_selection_retriever
 from openchatbi.utils import extract_json_from_answer, get_text_from_content, log
+
+
+def _compact_workflow_enabled() -> bool:
+    try:
+        return getattr(config.get(), "compact_sql_workflow", False) is True
+    except ValueError:
+        return False
+
+
+def _single_catalog_selection(candidates: dict, catalog_tables: list[str], dimensions: list) -> dict | None:
+    """Skip model selection only for a sole verified catalog table and known fields."""
+    if len(candidates) != 1 or set(candidates) != set(catalog_tables):
+        return None
+    table, (_, columns) = next(iter(candidates.items()))
+    names = {column["column_name"] for column in columns}
+    if not names or not isinstance(dimensions, list) or any(not isinstance(item, str) or item not in names for item in dimensions):
+        return None
+    return {"tables": [{"table": table, "columns": sorted(names)}],
+            "table_selection_source": "single_verified_catalog_table"}
+
+
+def _valid_compact_selection(selected, candidates: dict) -> bool:
+    if not isinstance(selected, list) or not selected:
+        return False
+    for item in selected:
+        if not isinstance(item, dict) or item.get("table") not in candidates:
+            return False
+        columns = item.get("columns")
+        names = {column["column_name"] for column in candidates[item["table"]][1]}
+        if not isinstance(columns, list) or not columns or any(not isinstance(name, str) or name not in names for name in columns):
+            return False
+    return True
 
 
 def schema_linking(llm: BaseChatModel, catalog: CatalogStore):
@@ -107,6 +142,15 @@ def schema_linking(llm: BaseChatModel, catalog: CatalogStore):
         Returns:
             str: Formatted prompt for table selection.
         """
+        if _compact_workflow_enabled():
+            candidates = {table: [column["column_name"] for column in columns]
+                          for table, (_, columns) in related_table_column_dict.items()}
+            return (
+                'Select only tables and columns from this catalog. Return one compact JSON object: '
+                '{"tables":[{"table":"listed_table","columns":["listed_column"]}]}. '
+                'Use {"tables":[]} when the requested data is unavailable. No reasoning or prose. '
+                'Do not calculate results. Catalog: ' + json.dumps(candidates, ensure_ascii=False)
+            )
         similar_examples = [
             f"- Question: {example}   Selected Tables: [{','.join(selected_tables)}]"
             for example, selected_tables in similar_examples.items()
@@ -194,17 +238,19 @@ def schema_linking(llm: BaseChatModel, catalog: CatalogStore):
                 result = _parse_table_selection_json(response.content)
                 selected_tables = result.get("tables")
                 log(result)
-                if _verify_table(selected_tables, candidate_tables):
-                    return {"tables": selected_tables}
+                valid = (_valid_compact_selection(selected_tables, candidate_tables)
+                         if _compact_workflow_enabled() else _verify_table(selected_tables, candidate_tables))
+                if valid:
+                    return {"tables": selected_tables, "table_selection_source": "model"}
                 else:
                     messages.append(
                         HumanMessage(
-                            f'The selected table {",".join([table.get("table") for table in result.get("tables") or []])} is not valid. '
-                            f"Do not select this table, please try again."
+                            'The selected tables or columns are not valid. '
+                            "Do not select this table, please try again."
                         )
                     )
                 retry_cnt += 1
-                if retry_cnt > 3:
+                if retry_cnt > get_llm_max_attempts():
                     retry_flag = False
                 if retry_flag:
                     log(
@@ -215,7 +261,7 @@ def schema_linking(llm: BaseChatModel, catalog: CatalogStore):
             except Exception as e:
                 log(str(e))
                 retry_cnt += 1
-                if retry_cnt > 3:
+                if retry_cnt > get_llm_max_attempts():
                     retry_flag = False
         return {}
 
@@ -238,7 +284,10 @@ def schema_linking(llm: BaseChatModel, catalog: CatalogStore):
         related_table_column_dict = _get_related_tables_and_columns(
             keywords_list, dimensions, metrics, start_time, invalid_table
         )
-        candidate_tables = related_table_column_dict.keys()
+        if _compact_workflow_enabled():
+            selection = _single_catalog_selection(related_table_column_dict, catalog.get_table_list(), dimensions)
+            if selection:
+                return selection
 
         # 2. Get the similar examples
         similar_examples = _example_retrieval(" ".join(keywords_list), related_table_column_dict.keys())
@@ -247,6 +296,7 @@ def schema_linking(llm: BaseChatModel, catalog: CatalogStore):
         system_prompt = _build_table_selection_prompt(related_table_column_dict, similar_examples)
 
         # 4. Call LLM to select the table
-        return _call_llm_select(llm, system_prompt, messages, question, candidate_tables)
+        candidates = related_table_column_dict if _compact_workflow_enabled() else related_table_column_dict.keys()
+        return _call_llm_select(llm, system_prompt, messages, question, candidates)
 
     return _select

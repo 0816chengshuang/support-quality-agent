@@ -1,12 +1,16 @@
 """Tools for searching knowledge bases and schema information."""
 
+import json
 from typing import Literal
 
+from langchain_core.messages import HumanMessage, ToolMessage
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
 from openchatbi import config
+from openchatbi.business_knowledge import BusinessKnowledgeSettings, search_business_documents
 from openchatbi.catalog.schema_retrival import col_dict, column_tables_mapping, get_relevant_columns
+from openchatbi.llm.llm import get_embedding_model
 from openchatbi.text2sql.data import get_learned_sql_store
 from openchatbi.utils import log
 
@@ -14,7 +18,7 @@ from openchatbi.utils import log
 class SearchKnowledgeInput(BaseModel):
     """Input schema for knowledge search tool."""
 
-    reasoning: str = Field(description="Reason for using this search tool")
+    reasoning: str = Field(default="", description="Optional trace explanation, not a search condition")
     query_list: list[str] = Field(
         min_length=1, max_length=5, description="Query terms to search (max 5, avoid duplicates)"
     )
@@ -23,14 +27,14 @@ class SearchKnowledgeInput(BaseModel):
         max_length=3,
         description="""Knowledge bases to search, options are:
             - `"columns"`: Field-level knowledge such as descriptions, aliases, categories, dimensions and metrics.
-            - `"business"`: The business knowledge.
+            - `"business"`: Business knowledge; configured documents return relevant excerpts and source references.
             - `"sql_examples"`: Validated example Question->SQL pairs (golden / learned).""",
     )
 
 
 @tool("search_knowledge", args_schema=SearchKnowledgeInput, return_direct=False, infer_schema=True)
 def search_knowledge(
-    reasoning: str, query_list: list[str], knowledge_bases: list[Literal["columns", "business", "sql_examples"]]
+    query_list: list[str], knowledge_bases: list[Literal["columns", "business", "sql_examples"]], reasoning: str = ""
 ) -> dict[str, object]:
     """Search relevant knowledge from knowledge bases.
     Returns:
@@ -56,6 +60,38 @@ def search_knowledge(
             warnings.append(warning)
     final_results["warnings"] = warnings
     return final_results
+
+
+def render_knowledge_report(messages: list) -> str | None:
+    """Use extractive citations in the bounded demo, never invent policy prose."""
+    for message in reversed(messages):
+        if isinstance(message, HumanMessage):
+            break
+        if not isinstance(message, ToolMessage) or message.name != "search_knowledge":
+            continue
+        try:
+            result = json.loads(message.content)
+        except (TypeError, ValueError):
+            result = None
+        if (not isinstance(result, dict) or message.status == "error"
+                or isinstance(result.get("business"), dict)
+                and result["business"].get("status") == "retrieval_error"):
+            return "本次资料检索失败，尚不能判断资料中是否有相关规定；请检查检索配置或问题参数后重试，不能据此编造结论或出处。"
+        business = result.get("business")
+        if isinstance(business, dict):
+            if business.get("status") == "no_match":
+                return "本次在已配置的规则资料中未找到匹配片段，无法提供该政策的依据，也不能猜测所需工作日。未命中不等于现实中不存在该规定。"
+            passages = business.get("passages", [])
+            if business.get("status") == "matched" and passages:
+                lines = ["检索到以下规则原文；这是相关资料片段，不额外生成未经核实的解释："]
+                for passage in passages:
+                    if not all(isinstance(passage.get(key), str) and passage[key] for key in ("text", "source_ref", "chunk_id")):
+                        return "检索结果的来源字段不完整，暂不能展示为可靠的规则引用。"
+                    lines.extend(["", passage["text"].strip(), "",
+                                  f"来源：{passage['source_ref']}；chunk_id：{passage['chunk_id']}。"])
+                return "\n".join(lines)
+        return None
+    return None
 
 
 class SearchSchemaInput(BaseModel):
@@ -273,9 +309,22 @@ def _build_match_reason(
     return "; ".join(pieces)
 
 
-def _search_business_knowledge(query_list: list[str]) -> tuple[str, str | None]:
-    """Return configured business knowledge."""
+def _search_business_knowledge(query_list: list[str]) -> tuple[str | dict, str | None]:
+    """Retrieve configured documents, retaining the legacy glossary when not enabled."""
     bi_config = getattr(config.get(), "bi_config", {}) or {}
+    if "business_documents" in bi_config:
+        try:
+            settings = BusinessKnowledgeSettings.model_validate(bi_config["business_documents"])
+            embedding = get_embedding_model() if settings.mode == "vector" else None
+            result = search_business_documents(settings, query_list, embedding)
+        except Exception as error:
+            log(f"Business document retrieval unavailable ({type(error).__name__}).")
+            return (
+                {"status": "retrieval_error", "passages": [], "notice": "Document retrieval is unavailable; do not invent sources."},
+                "Business document retrieval failed; no glossary fallback was used.",
+            )
+        warning = None if result["status"] == "matched" else f"Business document search returned {result['status']}."
+        return result, warning
     glossary = bi_config.get("basic_knowledge_glossary", "")
     if glossary:
         return str(glossary), None

@@ -4,6 +4,7 @@ import traceback
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables.base import RunnableBinding
 from langchain_core.tools import StructuredTool
+from langchain_openai.chat_models.base import BaseChatOpenAI
 
 from openchatbi import config
 from openchatbi.observability.metrics import LLMCallRecord, record_llm_call
@@ -97,6 +98,30 @@ def _bound_tool_names(tools) -> list[str]:
     return names
 
 
+def get_llm_max_attempts() -> int:
+    """Keep legacy retries unless a server profile explicitly disables them."""
+    try:
+        attempts = getattr(config.get(), "llm_max_attempts", 3)
+    except ValueError:
+        return 3
+    return attempts if type(attempts) is int and 1 <= attempts <= 3 else 3
+
+
+def bind_tools_for_profile(chat_model: BaseChatModel, tools, *, json_output: bool = False):
+    """Preserve upstream strict mode unless the server profile opts out."""
+    strict = isinstance(chat_model, BaseChatOpenAI)
+    try:
+        strict = strict and getattr(config.get(), "openai_strict_tools", True)
+    except ValueError:
+        pass
+    bound = chat_model.bind_tools(tools, **({"strict": True} if strict else {}))
+    # The installed SDK's response_format parse path requires strict tools.
+    # Compatible profiles use the existing prompt and application JSON parser.
+    if json_output and strict:
+        return bound.bind(response_format={"type": "json_object"})
+    return bound
+
+
 def call_llm_chat_model_with_retry(
     chat_model: BaseChatModel,
     messages,
@@ -136,8 +161,7 @@ def call_llm_chat_model_with_retry(
     )
     response = None
     retry = 0
-    # retry 3 times
-    while retry < 3:
+    while retry < get_llm_max_attempts():
         start_time = time.time()
         try:
             log(f"Call LLM chat model with retry {retry} times.")

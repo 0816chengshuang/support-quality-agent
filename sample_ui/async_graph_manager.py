@@ -45,7 +45,7 @@ class AsyncGraphManager:
             log("Graph initialized successfully")
 
         except Exception as e:
-            self._initialized = False
+            await self.cleanup()
             log(f"Failed to initialize graph: {e}")
             raise
 

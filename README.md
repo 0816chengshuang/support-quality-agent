@@ -1,4 +1,32 @@
-# OpenChatBI
+# 工单质量分析助手（基于 OpenChatBI）
+
+这是一个面向客服/运营复盘的**合成数据演示**：主管用自然语言查询超时率，追问类别差异，再检查指标口径和原始记录。要解决的不是“把 SQL 换成聊天框”，而是避免模型猜日期、改分母、把旧答案当本轮结果，或在没有查到资料时编造依据。
+
+本地改进包括三项固定口径指标 Skill、带来源的业务规则检索、查询范围与证据约束、中文会话恢复和针对性回归。LangGraph 主图、Text2SQL 子图、checkpoint 和 Streamlit 基础页面来自 [OpenChatBI 上游](https://github.com/zhongyu09/openchatbi)，保留其 MIT 许可与 Git 历史；[贡献边界](UPSTREAM.md)和[设计文档](docs/DESIGN.md)明确区分两者。全部工单都是虚构样本，不代表真实企业数据或生产效果。
+
+## 本地演示路径
+
+1. 在 Windows 上安装 Python 3.11、[Ollama](https://ollama.com/) 和项目依赖；执行 `ollama pull qwen2.5:3b`，并保持 Ollama 运行。项目默认用 BM25 检索，不需 embedding 模型或付费 API。
+2. 在仓库根目录依次执行 `py -3.11 -m venv .venv`、`.\.venv\Scripts\python.exe -m pip install -e .`、`.\.venv\Scripts\python.exe -m openchatbi.support_demo`。最后一步只创建被 Git 忽略的 `.local/support-demo`；若已有该目录会拒绝覆盖，绝不清理已有数据。
+3. 在同一 PowerShell 窗口设置 `$env:CONFIG_FILE = (Resolve-Path '.local/support-demo/config.local.yaml').Path`，再运行 `.\.venv\Scripts\python.exe run_streamlit_ui.py`，打开 [本机页面](http://127.0.0.1:8501/)。这是未修改的上游入口；若安全软件再次告警，停止运行并核验，不关闭防护或改用替代启动器。
+4. 新建对话，依次问：`统计 2026-10-01（含）到 2026-10-08（不含）新建工单的超时率，使用 UTC，按整体统计，不筛类别。`；`保持刚才日期和口径，按类别拆开看。`；`超时率分母包括未解决工单吗？请查规则并给出处。`。预期整体 **40%（4/10）**，类别分别为 **3/4、0/2、1/4**，规则回答附来源。
+5. 再问 `请查询合成工单原始表中的最大 id，包括测试、重复、已取消记录，不作业务排除、不限制日期。给出真实 SQL 和查询结果。`，可观察主助手交给上游 Text2SQL 子图并得到 **15**。新建另一对话问“这周超时率多少？”应先要求明确 UTC 日期，不能沿用上个会话的旧区间。
+
+详细演示输入、数据范围与失败案例见[场景说明](example/support_quality/README.md)；[项目陈述](example/support_quality/PROJECT_CASE_STUDY.md)记录可核验的成果和不能声称的能力。CPU 本机模型一次请求可能耗时数十秒，SQL 子图需要多次请求；项目**没有**生产 p95/吞吐/SLA 的测试结论。准备命令也不会启动服务或触发模型调用。
+
+![本机合成工单演示：整体 40% 与按类别追问](docs/images/metrics.png)
+
+![本机合成工单演示：原始记录只读 SQL 审计](docs/images/sql-audit.png)
+
+截图来自一次本机模型与只读合成数据库的实际对话；它展示的是可核对的分子/分母，不是生产指标。规则出处、失败分支和原始 SQL 路径需按上方提问步骤继续操作。
+
+## 质量检查
+
+开发环境可用 `pip install -e '.[test]'` 安装测试依赖，再在 Windows PowerShell 执行 `.\scripts\test-baseline.ps1`。脚本禁用付费 API 环境变量，运行与本演示相关的离线回归，结果留在不入库的 `.run/`。它不能代替真实模型验收。本地新增业务模块和测试按项目既有 Ruff 配置检查，例如 `ruff check openchatbi/support_demo.py openchatbi/analysis/support_quality.py openchatbi/business_knowledge.py openchatbi/tool/support_quality.py openchatbi/tool/support_routing.py openchatbi/tool/sql_handoff.py sample_ui/localization.py tests/local`。全仓检查仍有两处未修改的上游告警（`text2sql/errors.py` 和 `tool/memory.py`），本轮没有为消除告警而改写上游无关代码。
+
+---
+
+# OpenChatBI（上游项目说明）
 
 OpenChatBI is an open source, chat-based intelligent BI tool powered by large language models, designed to help users 
 query, analyze, and visualize data through natural language conversations. Built on LangGraph and LangChain ecosystem, 

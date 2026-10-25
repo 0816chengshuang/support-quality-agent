@@ -4,7 +4,6 @@ from typing import cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.tools import BaseTool
-from langchain_openai.chat_models.base import BaseChatOpenAI
 from langgraph.constants import END, START
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -16,7 +15,7 @@ from openchatbi import config
 from openchatbi.catalog import CatalogStore
 from openchatbi.constants import SQL_EXECUTE_TIMEOUT, SQL_SUCCESS
 from openchatbi.graph_state import SQLGraphState, SQLInputState, SQLOutputState
-from openchatbi.llm.llm import get_llm, get_text2sql_llm
+from openchatbi.llm.llm import bind_tools_for_profile, get_llm, get_text2sql_llm
 from openchatbi.text2sql.data import get_learned_sql_store
 from openchatbi.text2sql.errors import RecoveryStrategy
 from openchatbi.text2sql.extraction import information_extraction, information_extraction_conditional_edges
@@ -136,12 +135,7 @@ def build_sql_graph(
     tools: list[BaseTool] = [search_knowledge, AskHuman]  # type: ignore[list-item]
     search_tool_node = ToolNode([search_knowledge])
     default_llm = get_llm(llm_provider)
-    if isinstance(default_llm, BaseChatOpenAI):
-        llm_with_tools = cast(
-            BaseChatModel, default_llm.bind_tools(tools, strict=True).bind(response_format={"type": "json_object"})
-        )
-    else:
-        llm_with_tools = cast(BaseChatModel, default_llm.bind_tools(tools))
+    llm_with_tools = cast(BaseChatModel, bind_tools_for_profile(default_llm, tools, json_output=True))
     # Create SQL processing nodes with visualization configuration
     (
         generate_sql_node,

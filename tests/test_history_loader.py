@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from sample_ui.history_loader import (
     load_session_history,
     load_session_history_tuples,
+    list_session_summaries,
     messages_to_chat_tuples,
     messages_to_ui_history,
 )
@@ -50,6 +51,13 @@ class TestMessagesToUiHistory:
     def test_skip_empty_content(self):
         assert messages_to_ui_history([HumanMessage(content="   ")]) == []
         assert messages_to_ui_history([AIMessage(content="")]) == []
+
+    def test_restored_history_keeps_user_facing_clarification_question(self):
+        messages = [HumanMessage("这周超时率"), AIMessage(content="", tool_calls=[{
+            "name": "AskHuman", "id": "dates", "args": {"question": "请确认日期范围。"},
+        }]), HumanMessage("2026-10-01 到 2026-10-08")]
+        history = messages_to_ui_history(messages)
+        assert history[1] == {"role": "assistant", "type": "text", "content": "请确认日期范围。"}
 
     def test_preserves_order(self):
         messages = [
@@ -166,3 +174,48 @@ def test_load_session_history_tuples_none_state():
 def test_load_session_history_tuples_handles_exception():
     graph = _FakeGraph(raise_exc=True)
     assert asyncio.run(load_session_history_tuples(graph, "user", "session")) == []
+
+
+def checkpoint(user, session, question, namespace=""):
+    return SimpleNamespace(
+        config={"configurable": {"thread_id": f"{user}-{session}", "checkpoint_ns": namespace}},
+        metadata={"user_id": user},
+        checkpoint={"channel_values": {"messages": [HumanMessage(question), AIMessage("answer")]}},
+    )
+
+
+class ConversationCheckpointer:
+    def __init__(self, items):
+        self.items = items
+        self.closed = False
+
+    async def alist(self, config, *, filter):
+        self.filter = filter
+        try:
+            for item in self.items:
+                yield item
+        finally:
+            self.closed = True
+
+
+def test_history_list_deduplicates_threads_and_filters_exact_user_and_root():
+    saver = ConversationCheckpointer([
+        checkpoint("demo-other", "private", "other user's history"),
+        checkpoint("demo", "latest", "first question", namespace="subgraph"),
+        checkpoint("demo", "latest", "first question"),
+        checkpoint("demo", "latest", "older checkpoint"),
+        checkpoint("demo", "empty", ""),
+        checkpoint("demo", "old", "old conversation"),
+    ])
+    assert asyncio.run(list_session_summaries(saver, "demo")) == [
+        {"session_id": "latest", "title": "first question"},
+        {"session_id": "old", "title": "old conversation"},
+    ]
+    assert saver.filter == {"user_id": "demo"}
+    assert saver.closed
+
+
+def test_history_list_limit_closes_checkpoint_iterator():
+    saver = ConversationCheckpointer([checkpoint("demo", "one", "A" * 80), checkpoint("demo", "two", "second")])
+    assert asyncio.run(list_session_summaries(saver, "demo", limit=1)) == [{"session_id": "one", "title": "A" * 40}]
+    assert saver.closed

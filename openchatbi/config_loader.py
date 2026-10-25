@@ -5,7 +5,7 @@ from typing import Any
 from unittest.mock import MagicMock
 
 from langchain_core.language_models import BaseChatModel
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from openchatbi.catalog.factory import create_catalog_store
 from openchatbi.constants import EXTRACTION_MAX_TOOL_ROUNDS, SQL_RESULT_LIMIT
@@ -78,6 +78,16 @@ class Config(BaseModel):
 
     # BI Configuration
     bi_config: dict[str, Any] = {}
+
+    # None preserves upstream tools; explicit names constrain both binding and execution.
+    agent_tool_allowlist: list[str] | None = None
+    llm_max_attempts: int = Field(default=3, ge=1, le=3)
+    # OpenAI-compatible providers do not necessarily support strict tool schemas.
+    openai_strict_tools: bool = True
+    compact_sql_workflow: bool = False
+    anchor_sql_user_request: bool = False
+    require_sql_execution_evidence: bool = False
+    support_task_routing: bool = False
 
     # Data Warehouse Configuration
     data_warehouse_config: dict[str, Any] = {}

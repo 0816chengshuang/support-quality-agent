@@ -14,6 +14,7 @@ dropped - the restored view shows user prompts and final AI text replies.
 
 from __future__ import annotations
 
+from contextlib import aclosing
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -42,6 +43,41 @@ def _extract_text(content: Any) -> str:
     return str(content).strip()
 
 
+def current_assistant_answer(messages: Any) -> str | None:
+    """Read the completed answer, including reports with no LLM token stream."""
+    if not messages:
+        return None
+    last = messages[-1]
+    if isinstance(last, AIMessage) and not last.tool_calls:
+        return _extract_text(last.content)
+    # A pending request/tool call must not reuse a previous turn's answer.
+    return ""
+
+
+async def list_session_summaries(checkpointer: Any, user_id: str, limit: int = 50) -> list[dict]:
+    """List each user's latest root checkpoints without adding another history store."""
+    summaries = []
+    seen = set()
+    prefix = f"{user_id}-"
+    async with aclosing(checkpointer.alist(None, filter={"user_id": user_id})) as checkpoints:
+        async for item in checkpoints:
+            scope = item.config.get("configurable", {})
+            thread = scope.get("thread_id", "")
+            if (item.metadata.get("user_id") != user_id or scope.get("checkpoint_ns", "")
+                    or not thread.startswith(prefix) or thread in seen):
+                continue
+            seen.add(thread)
+            messages = item.checkpoint.get("channel_values", {}).get("messages", [])
+            title = next((_extract_text(message.content) for message in messages
+                          if isinstance(message, HumanMessage) and _extract_text(message.content)), "")
+            if not title:
+                continue
+            summaries.append({"session_id": thread[len(prefix):], "title": " ".join(title.split())[:40]})
+            if len(summaries) >= limit:
+                break
+    return summaries
+
+
 def messages_to_ui_history(messages: Any) -> list[dict]:
     """Convert checkpoint LangChain messages into UI history message dicts.
 
@@ -68,6 +104,12 @@ def messages_to_ui_history(messages: Any) -> list[dict]:
             # Skip pure tool-call turns (no user-facing text).
             if text:
                 history.append({"role": "assistant", "type": "text", "content": text})
+            else:
+                for call in message.tool_calls:
+                    if call["name"] == "AskHuman":
+                        question = _extract_text(call.get("args", {}).get("question"))
+                        if question:
+                            history.append({"role": "assistant", "type": "text", "content": question})
         # ToolMessage, SystemMessage and anything else are intentionally dropped.
     return history
 

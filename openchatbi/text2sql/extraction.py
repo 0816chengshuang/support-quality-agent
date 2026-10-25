@@ -34,6 +34,23 @@ def _generate_extraction_prompt() -> str:
     Returns:
         str: Generated prompt with placeholders replaced.
     """
+    try:
+        compact = getattr(config.get(), "compact_sql_workflow", False) is True
+    except ValueError:
+        compact = False
+    if compact:
+        return (
+            "把最新用户请求改写成明确的英文查询要求，保留字段、聚合方式、包含/排除条件。"
+            "之前的问题仅作上下文，最新要求优先。用户明确全部记录/不作排除时 filter=[]，"
+            "没有日期或明确不限制日期时 start_time/end_time=null；不要套业务指标过滤规则。"
+            "原始记录、最大/最小值、行数是明确的基础查询，不需要查业务定义或追问日期。"
+            "只输出紧凑 JSON，不输出解释或推理："
+            '{"keywords":["requested concepts"],"dimensions":["requested fields"],'
+            '"metrics":["requested aggregates"],"filter":[],"start_time":null,'
+            '"end_time":null,"timezone":null,"rewrite_question":"complete English request"}.'
+            "真正缺少必要条件才 AskHuman；不熟悉的业务词才 search_knowledge，"
+            '且显式传 knowledge_bases=["business"] 和不超过 5 个 query_list 词。'
+        )
     prompt = get_extraction_prompt_template()
 
     date_str = date.today().strftime("%Y-%m-%d")
@@ -99,9 +116,21 @@ def information_extraction(llm: BaseChatModel) -> Callable:
             else:
                 llm_answer_content = response.content
                 parsed_result = _parse_extracted_info_json(llm_answer_content)
+                rewrite = parsed_result.get("rewrite_question")
+                source = "model"
+                try:
+                    compact = getattr(config.get(), "compact_sql_workflow", False) is True
+                except ValueError:
+                    compact = False
+                fields = ("keywords", "dimensions", "metrics", "filter")
+                valid_fields = all(isinstance(parsed_result.get(key), list) and all(isinstance(item, str) for item in parsed_result[key]) for key in fields)
+                if compact and not rewrite and valid_fields and any(parsed_result[key] for key in fields):
+                    rewrite = user_input
+                    source = "original_request_fallback"
                 return {
                     "messages": [response],
-                    "rewrite_question": parsed_result.get("rewrite_question"),
+                    "rewrite_question": rewrite,
+                    "extraction_source": source,
                     "info_entities": parsed_result,
                 }
         else:
