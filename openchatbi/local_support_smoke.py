@@ -110,7 +110,7 @@ def run_local_support_smoke(repository: Path) -> dict:
             record["status"] = (
                 "passed"
                 if summary.model_dump()
-                == {"numerator": 4, "denominator": 10, "ratio": 0.4, "source_ref": "support-quality-v1#overdue-rate"}
+                == {"numerator": 4, "denominator": 10, "ratio": 0.4, "source_ref": "support-quality-v1#超时率"}
                 else "summary_verification_failed"
             )
             return record

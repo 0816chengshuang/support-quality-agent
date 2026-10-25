@@ -419,7 +419,7 @@ def display_message_with_thinking(
 
 # Main UI
 st.title("工单质量分析助手")
-st.caption("本地演示 · 合成工单数据 · 基于 OpenChatBI")
+st.caption("本地演示 · 合成工单数据 · 只读查询")
 
 try:
     model_configured = openchatbi_config.get().default_llm is not None

@@ -12,12 +12,12 @@ from openchatbi.business_knowledge import BusinessKnowledgeSettings, search_busi
 
 EMBEDDING_MODEL = "embeddinggemma:300m"
 CASES = (
-    ("到观察时间还没办完的单子，会计入超时占比的基数吗", "overdue-rate"),
-    ("测试单、重复单和已经取消的单子会参加统计吗", "cohort"),
-    ("已经完成的单子平均用了多长时间，怎么算", "average-resolution-minutes"),
-    ("How many eligible tickets were newly created within the range?", "ticket-count"),
-    ("还没有解决的请求，会被当成零分钟计入平均耗时吗", "average-resolution-minutes"),
-    ("Which clock and boundary define the observation cutoff?", "cohort"),
+    ("到观察时间还没办完的单子，会计入超时占比的基数吗", "超时率"),
+    ("测试单、重复单和已经取消的单子会参加统计吗", "统计对象"),
+    ("已经完成的单子平均用了多长时间，怎么算", "平均处理时长"),
+    ("How many eligible tickets were newly created within the range?", "工单数量"),
+    ("还没有解决的请求，会被当成零分钟计入平均耗时吗", "平均处理时长"),
+    ("Which clock and boundary define the observation cutoff?", "统计对象"),
 )
 
 

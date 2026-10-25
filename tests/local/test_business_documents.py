@@ -46,7 +46,7 @@ class CountingEmbeddings(Embeddings):
     @staticmethod
     def vector(text):
         lowered = text.casefold()
-        if any(word in lowered for word in ("overdue", "late", "超时")):
+        if any(word in lowered for word in ("overdue", "late", "超时率")):
             return [1.0, 0.0, 0.0]
         if any(word in lowered for word in ("average", "mean", "平均")):
             return [0.0, 1.0, 0.0]
@@ -64,12 +64,12 @@ class CountingEmbeddings(Embeddings):
 @pytest.mark.parametrize(
     "query,source_ref",
     [
-        ("超时率怎么算", "support-quality-v1#overdue-rate"),
-        ("未解决工单超时率分母", "support-quality-v1#overdue-rate"),
-        ("平均处理时长", "support-quality-v1#average-resolution-minutes"),
-        ("新建工单量", "support-quality-v1#ticket-count"),
-        ("overdue rate denominator unresolved", "support-quality-v1#overdue-rate"),
-        ("UTC snapshot cancelled test duplicate", "support-quality-v1#cohort"),
+        ("超时率怎么算", "support-quality-v1#超时率"),
+        ("未解决工单超时率分母", "support-quality-v1#超时率"),
+        ("平均处理时长", "support-quality-v1#平均处理时长"),
+        ("新建工单量", "support-quality-v1#工单数量"),
+        ("有效新建工单有多少", "support-quality-v1#工单数量"),
+        ("观察截止之前取消的测试单和重复单", "support-quality-v1#统计对象"),
     ],
 )
 def test_small_independent_retrieval_cases(query, source_ref):
@@ -98,7 +98,7 @@ def test_calculation_definition_references_resolve_to_the_corpus():
 
     references = {chunk.metadata["source_ref"] for chunk in load_knowledge_chunks(settings())}
     assert {definition["source"] for definition in DEFINITIONS.values()} <= references
-    assert "support-quality-v1#cohort" in references
+    assert "support-quality-v1#统计对象" in references
 
 
 def test_commonmark_parser_does_not_treat_fenced_code_as_heading(tmp_path):
@@ -127,9 +127,10 @@ def test_no_lexical_match_does_not_return_arbitrary_top_k(query):
     assert result["passages"] == []
 
 
-def test_context_budget_does_not_clip_a_source_and_hide_it():
-    config = settings(max_context_chars=512)
-    result = search_business_documents(config, ["overdue"])
+def test_context_budget_does_not_clip_a_source_and_hide_it(tmp_path):
+    (tmp_path / "rules.md").write_text("# 超时率\n" + "分母包含有效工单。" * 55, encoding="utf-8")
+    config = settings(root=str(tmp_path), sources=[{"id": "rules", "path": "rules.md"}], max_context_chars=512)
+    result = search_business_documents(config, ["超时率"])
     assert result["context_chars"] <= config.max_context_chars
     assert result["status"] == "context_budget_exceeded"
     assert result["passages"] == []
@@ -138,7 +139,7 @@ def test_context_budget_does_not_clip_a_source_and_hide_it():
 
 def test_top_k_deduplication_and_serialized_context_budget():
     config = settings(top_k=2, max_context_chars=3000)
-    result = search_business_documents(config, ["overdue", "overdue", "average"])
+    result = search_business_documents(config, ["超时率", "超时率", "平均处理时长"])
     passages = result["passages"]
     assert 1 <= len(passages) <= 2
     assert len({passage["chunk_id"] for passage in passages}) == len(passages)
@@ -197,10 +198,10 @@ def test_vector_similarity_threshold_can_return_no_match(tmp_path):
 def test_vector_store_embedding_and_cache_path():
     embedding = CountingEmbeddings()
     config = settings(mode="vector", top_k=1, min_similarity=0.9)
-    first = search_business_documents(config, ["late", "late"], embedding)
-    second = search_business_documents(config, ["late"], embedding)
+    first = search_business_documents(config, ["超时率", "超时率"], embedding)
+    second = search_business_documents(config, ["超时率"], embedding)
     assert first["passages"] == second["passages"]
-    assert first["passages"][0]["source_ref"] == "support-quality-v1#overdue-rate"
+    assert first["passages"][0]["source_ref"] == "support-quality-v1#超时率"
     assert embedding.document_calls == 1
     assert embedding.query_calls == 2
 
@@ -262,7 +263,7 @@ def test_existing_tool_uses_retrieval_without_calling_embedding(monkeypatch):
         {"reasoning": "Find the definition", "query_list": ["超时率"], "knowledge_bases": ["business"]}
     )
     assert result["business"]["status"] == "matched"
-    assert result["business"]["passages"][0]["source_ref"] == "support-quality-v1#overdue-rate"
+    assert result["business"]["passages"][0]["source_ref"] == "support-quality-v1#超时率"
     assert result["warnings"] == []
     embedding_loader.assert_not_called()
 
@@ -360,7 +361,7 @@ async def test_original_search_tool_returns_citable_passages_through_toolnode(mo
     assert len(tool_messages) == 1
     business = json.loads(tool_messages[0].content)["business"]
     assert business["status"] == "matched"
-    assert business["passages"][0]["source_ref"] == "support-quality-v1#overdue-rate"
+    assert business["passages"][0]["source_ref"] == "support-quality-v1#超时率"
     assert len(business["passages"][0]["chunk_id"]) == 20
 
 

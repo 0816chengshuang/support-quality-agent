@@ -19,17 +19,17 @@ METRICS = {
     "ticket_count": {
         "unit": "tickets",
         "formula": "count of eligible tickets created in [start_date, end_date)",
-        "source": "support-quality-v1#ticket-count",
+        "source": "support-quality-v1#工单数量",
     },
     "avg_resolution_minutes": {
         "unit": "minutes",
         "formula": "resolution minutes / tickets resolved before the snapshot",
-        "source": "support-quality-v1#average-resolution-minutes",
+        "source": "support-quality-v1#平均处理时长",
     },
     "overdue_rate": {
         "unit": "ratio",
         "formula": "overdue tickets / all eligible tickets, including unresolved tickets",
-        "source": "support-quality-v1#overdue-rate",
+        "source": "support-quality-v1#超时率",
     },
 }
 
@@ -109,7 +109,7 @@ def analyze_support_quality(engine: Engine, request: SupportQualityInput, snapsh
         "snapshot_exclusive": params["snapshot"],
         "definition_version": DEFINITION_VERSION,
         **METRICS[metric],
-        "cohort_source": "support-quality-v1#cohort",
+        "cohort_source": "support-quality-v1#统计对象",
     }
     fingerprint = hashlib.sha256(json.dumps({"sql": sql, "params": params}, sort_keys=True).encode()).hexdigest()
     evidence = {"sql": sql, "parameters": params, "query_fingerprint": fingerprint}

@@ -249,7 +249,7 @@ def test_evidence_note_is_from_current_turn_not_an_older_query(support_database)
     evidence = ToolMessage(name="support_quality", tool_call_id="actual", content=json.dumps(result))
     note = support_evidence_note([HumanMessage("query"), evidence])
     assert "合成演示" in note and "4/10" in note
-    assert "2026-10-01" in note and "support-quality-v1#overdue-rate" in note
+    assert "2026-10-01" in note and "support-quality-v1#超时率" in note
     assert support_evidence_note([evidence, HumanMessage("a new unrelated question")]) == ""
 
 
@@ -378,4 +378,4 @@ async def test_existing_langgraph_executes_skill_and_returns_tool_evidence(monke
     assert evidence["status"] == "succeeded"
     assert evidence["rows"][0]["numerator"] == 4
     assert evidence["rows"][0]["denominator"] == 10
-    assert evidence["contract"]["source"] == "support-quality-v1#overdue-rate"
+    assert evidence["contract"]["source"] == "support-quality-v1#超时率"

@@ -1,31 +1,14 @@
-# Support Quality Analysis Skill
+# 工单质量指标技能
 
-仅用于有效工单的三种业务指标：工单数量、平均处理时长、超时率。
-原始表审计、MAX/MIN 字段值、包括全部测试/重复/取消记录的查询应使用 text2sql，
-不能在本工具中伪造指标或索要无关日期。定义/政策问题应 search_knowledge 检索规则。
+只用于合成工单数据的三项固定指标：工单数量、平均处理时长和超时率。
+原始表审计、字段最大/最小值，以及明确要求包含测试、重复或已取消记录的查询，交给 `text2sql`。
+指标定义或政策问题先调用 `search_knowledge` 检索规则，不用本技能的数值查询冒充资料出处。
 
-Use the support_quality tool for support-ticket volume, average resolution time
-and overdue-rate questions against the configured synthetic support dataset.
+1. 识别用户明确提出的指标及 UTC 起止日期；开始日包含、结束日不包含。不要编造缺失日期，也不要把“看看质量”自行解释为某个指标。
+2. “这周”等相对时间是新的时间条件，不能沿用历史查询日期。本演示要求用户明确给出 UTC 起止日期；没有完整日期时先询问，不把旧结果重新标注为本周数据。
+3. 缺少指标或日期时传入 `null`。工具返回 `needs_clarification` 后，用 `AskHuman` 补齐再继续；`execution_error` 和 `result_limit_exceeded` 也不能当成成功。
+4. 工具校验范围并执行固定的参数化只读 SQL。超时计算包含已过期限但尚未解决的工单，排除测试、重复及观察截止前取消的记录，观察时间以配置的截止点而非机器当前日期为准。
+5. 结果说明数值、单位、时间窗口、观察截止、分子分母与规则来源。比例 `0.4` 是 `40%`；均值为空表示没有已观察到的解决记录，不是零分钟；无数据也不是质量评分。
+6. 按类别拆分使用 `group_by=category`，不能不看各类分母就直接平均百分比，也不能仅凭类别差异推断原因。
 
-1. Identify an explicitly requested metric and a UTC date range. Dates use an
-   inclusive start and exclusive end. Do not invent missing dates or translate
-   an ambiguous request such as "quality" into a metric without asking.
-   Relative time such as "this week" is a new time constraint, not permission
-   to reuse historical dates. This demo asks for explicit UTC start/end dates
-   unless the current request already contains a complete YYYY-MM-DD range.
-   Never relabel a historical result as current-week data.
-2. Pass missing metric/dates as null. If the result is needs_clarification, use
-   AskHuman to obtain the missing information before retrying. Never interpret
-   needs_clarification, execution_error or result_limit_exceeded as success.
-3. The tool validates scope and executes fixed, parameterized SQL. It includes
-   overdue unresolved tickets, excludes test/duplicate/cancelled tickets, and
-   uses the configured snapshot rather than the machine's current time.
-4. Report the value, unit, time window, snapshot, numerator/denominator and
-   returned definition source. A ratio of 0.4 means 40%. A null average means no
-   observed resolutions, not zero minutes. no_data is not a quality score.
-5. Use group_by=category for a breakdown. Never average category percentages
-   without their denominators. Do not infer causes from a category difference.
-
-Definitions: support-quality-v1 in METRICS.md in this Skill directory.
-This is a curated task Skill exposed through one tool, not dynamic Skill
-discovery, document RAG, an autonomous second agent or a general SQL sandbox.
+具体定义见同目录的 `METRICS.md`（规则版本 `support-quality-v1`）。这是一个预设任务技能，不是动态技能发现、独立自治 Agent 或通用 SQL 沙箱。

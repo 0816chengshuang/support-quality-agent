@@ -1,9 +1,27 @@
 # Local Baseline
 
-Updated: 2026-10-23. Sources/license: [UPSTREAM.md](./UPSTREAM.md).
+Updated: 2026-10-25. Sources/license: [UPSTREAM.md](./UPSTREAM.md).
 This is an upstream-based local demonstration candidate, not production acceptance.
 Detailed historical runs remain in the coordination LEARNING_LOG.md; older statements
 are historical, not the current acceptance state.
+
+## Current public presentation (2026-10-25)
+
+The personal repository now has a Chinese-only root README, business-specific design
+and demo narrative, and no embedded screenshots. The business rule corpus and Skill
+instructions are Chinese; citations now use Chinese section anchors (for example,
+`support-quality-v1#超时率`) while keeping the version ID. The full selected offline
+regression passed **360 tests in 15.74 seconds** after these changes. A direct BM25
+query for the unresolved-ticket denominator returned the Chinese overdue-rate section
+with its source reference. The existing Streamlit service health endpoint returned
+`ok`; this round did not repeat an end-to-end browser/model interaction or call a paid API.
+The old English README remains accessible in Git history, with the original MIT
+license and upstream commits preserved. The published root README credits upstream
+once at the end; current contributions must still be described accurately.
+
+The older sections below record historical development states. In particular, older
+"no remote", "no UI", and "no commit" statements have been superseded by the
+published repository and the authorized original Streamlit entrypoint.
 
 ## Environment and Isolation
 

@@ -30,7 +30,7 @@ def test_structured_execution_steps_are_chinese_without_changing_sql(kind, data,
     [
         "整体超时率：40%（4/10）。",
         "SQL 执行依据：SELECT MAX(id)，15。",
-        "规则原文；来源：support-quality-v1#overdue-rate；chunk_id：actual。",
+        "规则原文；来源：support-quality-v1#超时率；chunk_id：actual。",
     ],
 )
 def test_program_reports_are_completed_answers(answer):

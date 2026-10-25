@@ -125,7 +125,7 @@ def check_scenario(name, turn):
         return {
             "correct_scope_and_query": matched,
             "has_final_answer": bool(answer),
-            "has_demo_label_and_evidence": "合成演示" in answer and "support-quality-v1#overdue-rate" in answer,
+            "has_demo_label_and_evidence": "合成演示" in answer and "support-quality-v1#超时率" in answer,
             "single_evidence_footer": answer.count(EVIDENCE_MARKER) == 1,
             "answer_contains_expected_rates": all(
                 value in answer.replace(" ", "") for value in (["75%", "0%", "25%"] if grouped else ["40%"])
@@ -185,9 +185,7 @@ def check_scenario(name, turn):
         cited = [
             p
             for p in passages
-            if p["source_ref"] == "support-quality-v1#overdue-rate"
-            and p["source_ref"] in answer
-            and p["chunk_id"] in answer
+            if p["source_ref"] == "support-quality-v1#超时率" and p["source_ref"] in answer and p["chunk_id"] in answer
         ]
         return {"retrieved_and_cited_definition": bool(cited), "has_final_answer": bool(answer)}
     return {
