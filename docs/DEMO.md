@@ -20,6 +20,30 @@
 | “原始表最大 id 是多少？” | 实际执行的只读 SQL 与结果 `15` | 区分原始记录审计与有效工单指标 |
 | “这周超时率呢？” | 先问清 UTC 起止日期并保存待继续状态 | 不拿演示数据或旧会话日期冒充本周数据 |
 
+## 系统结构与模块分工
+
+```mermaid
+flowchart TB
+    UI["中文网页 / 会话 ID"] --> G["LangGraph 主图 / 检查点"]
+    G --> M["指标 Skill / 固定口径 SQL"]
+    G --> K["规则检索 / 原文引用"]
+    G --> S["Text2SQL 子图 / 原始记录审计"]
+```
+
+这张图只画本次演示实际经过的路径。主管先问指标，再追问分类与规则，最后核对原始表；程序根据当前问题选择对应能力，不会在每一轮同时运行三条路径。日期不清楚时，主图在调用模型前先要求澄清，并在原会话保留待继续状态。
+
+| 模块 | 在演示中怎样起作用 | 上游基础与本项目增量 |
+| --- | --- | --- |
+| [网页和会话](../sample_ui/streamlit_ui.py)、[状态](../openchatbi/graph_state.py) | 显示问题、执行事件、结果与历史 | 基础页面及检查点沿用上游；中文交互、历史恢复和本轮计时为本地改进 |
+| [主对话图](../openchatbi/agent_graph.py)、[任务路由](../openchatbi/tool/support_routing.py) | 接收追问，选择可用工具或要求补充条件 | LangGraph 主图沿用上游；针对工单的工具收窄、相对日期与证据门槛为本地改进 |
+| [指标 Skill](../openchatbi/skills/support_quality/SKILL.md)、[指标计算](../openchatbi/analysis/support_quality.py) | 校验时间/类别，按固定分子分母计算超时率 | 工单业务规则、参数化查询及边界测试为本地实现 |
+| [规则工具](../openchatbi/tool/search_knowledge.py)、[规则索引](../openchatbi/business_knowledge.py) | 检索业务文档，返回原文、来源和片段编号 | 通用工具接口沿用上游；工单规则资料、BM25 索引和引用约束为本地改进 |
+| [SQL 子图](../openchatbi/text2sql/sql_graph.py)、[交接证据](../openchatbi/tool/sql_handoff.py) | 接手原始记录问题，生成并执行只读查询 | Text2SQL 子图沿用上游；范围锚定和执行结果证据为本地改进 |
+
+`docs/source` 是上游的模块参考，按 [Core](source/core.rst)、[Tools](source/tools.rst)、[Text2SQL](source/text2sql.rst)、[Catalog](source/catalog.rst) 和 [LLM](source/llm.rst) 等模块组织。这里把**本案例实际使用的部分**提前列出来；其中的数据分析 Agent、时间序列等上游扩展不在这次工单演示链路中。
+
+从 Agent 岗位看，这条链路分别体现 Tool/Skill 调用、带出处的规则检索、检查点会话、有限的主图到 SQL 子图交接，以及工具白名单和执行证据约束；指标查询本身仍是单工具路径，不能把所有问句都描述成多 Agent 协作。
+
 ## 问题是怎样被发现的
 
 我们先跑通原有对话图和 SQL 子流程，再用合成工单做连续提问。单步“能回答”并不足够；真正暴露问题的是**追问、切换任务和切换会话**。

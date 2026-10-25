@@ -7,6 +7,13 @@ are historical, not the current acceptance state.
 
 ## Current public presentation (2026-10-25)
 
+README now surfaces the active UI -> LangGraph -> metric/knowledge/Text2SQL
+structure before the GIF. `docs/DEMO.md` adds an architecture map, code-entry
+links and a contribution split. `docs/source` is upstream Sphinx module/API
+reference, not proof that all upstream modules run in this ticket scenario;
+data-analysis and time-series extensions are explicitly outside the demo.
+This is documentation-only; no new model invocation or code regression run.
+
 The shareable presentation is now `docs/DEMO.md`: the original GIF opens the
 same page as the user scenario, observed defects, implementation decisions,
 measured outcomes and limitations. README links there through its GIF preview;

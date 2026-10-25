@@ -4,6 +4,20 @@
 
 用户用自然语言提出需求；指标 Skill 按固定规则取数，资料检索给出口径出处，SQL 子流程支持原始记录核对。日期不清楚时先澄清，结果始终关联本轮查询或检索证据。
 
+## 系统结构
+
+| 运行层次 | 本案例的职责 | 可查看的实现 |
+| --- | --- | --- |
+| 网页与会话 | 接收追问、切换历史会话、显示执行过程和证据 | [中文页面](sample_ui/streamlit_ui.py) |
+| 主对话图 | 维护状态，按当前问题限制可用工具，必要时澄清 | [LangGraph 主图](openchatbi/agent_graph.py)、[任务路由](openchatbi/tool/support_routing.py) |
+| 三条任务路径 | 指标 Skill 固定口径；规则检索给出处；Text2SQL 子图核对原始记录 | [指标实现](openchatbi/analysis/support_quality.py)、[检索实现](openchatbi/business_knowledge.py)、[SQL 子图](openchatbi/text2sql/sql_graph.py) |
+
+[单页演示中的结构图与来源划分](docs/DEMO.md#系统结构与模块分工)把这些模块和实际用户操作对应起来。[上游模块参考](docs/source/index.rst)另列更多通用能力，不等于本案例全部启用。
+
+对应的 Agent 知识点也能从操作中指出：指标是 Tool/Skill 调用，规则回答是带出处的检索，原始审计发生主图到 Text2SQL 子图的有限角色交接，会话由检查点恢复；工具范围和本轮证据限制了模型能做什么、能声称什么。
+
+## 完整演示
+
 [![合成工单质量复盘的完整中文页面演示](docs/demo.gif)](docs/DEMO.md)
 
 点击动图进入[完整演示与设计复盘](docs/DEMO.md)：整体指标、分类追问、规则出处、原始记录审计和日期澄清，以及每一步为什么这样设计、如何验证。画面来自本项目真实网页，等待段按讲解节奏压缩。
