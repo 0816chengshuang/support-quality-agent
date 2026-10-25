@@ -7,16 +7,24 @@ are historical, not the current acceptance state.
 
 ## Current public presentation (2026-10-25)
 
-The README and design note now use a project-specific SVG business flow in
-place of the generic Mermaid convergence. Its upper branch means exactly one
-task path is selected; its lower rail means any selected path must pass the
-same current-turn evidence gate. The design note contains the complete local
-classification-and-latency example inline, with the separate four-path script
-retained for repetition. The original upstream README had linked its own
-`example/demo.gif`; that historical upstream animation is not evidence for
-this project's business or latency demonstration. This round changes only
-public documentation and diagram assets; no new model run or test result is
-claimed.
+The README and design note now contain an original seven-scene `docs/demo.gif`
+made from actual Chinese Streamlit UI interactions with synthetic ticket data.
+It covers overall and grouped metrics, a rule citation, SQL handoff and executed
+result, then an ambiguous-date clarification. Waiting periods are edited to
+presentation pace; the GIF is not a real-time performance record. The former
+`docs/business-flow.svg` was replaced with a simpler Mermaid task-branch diagram.
+The design note now documents observed failures, causes, local fixes, boundaries,
+the complete walkthrough, and measured per-turn latencies. The original upstream
+README's `example/demo.gif` remains upstream history, not this demo's source.
+
+The 2026-10-25 browser capture used local Ollama `qwen2.5:3b` and an isolated
+`portfolio-gif` session. It observed overall 4/10, category 3/4, 0/2, 1/4,
+the Chinese rule source, and an executed read-only SQL result MAX(id)=15.
+A separate new chat asked "this week" and received clarification without a
+metric. In-process per-turn times: 33.09, 16.96, 30.95, 75.45 and 0.04 seconds
+respectively. This is five single local observations, not p95 or production
+latency. No paid API was called. This round changed docs/media only, so the
+previous 360-test result is historical; no new regression run is claimed.
 
 The Chinese portfolio now includes Mermaid user/system/latency flows and a
 four-path local latency demonstration. The existing Streamlit page measures
