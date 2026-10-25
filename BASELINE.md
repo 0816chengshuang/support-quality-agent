@@ -7,6 +7,12 @@ are historical, not the current acceptance state.
 
 ## Current public presentation (2026-10-25)
 
+The shareable presentation is now `docs/DEMO.md`: the original GIF opens the
+same page as the user scenario, observed defects, implementation decisions,
+measured outcomes and limitations. README links there through its GIF preview;
+`docs/DESIGN.md` remains a short compatibility pointer for earlier links.
+This is a documentation/navigation change only, with no new model or test run.
+
 The README and design note now contain an original seven-scene `docs/demo.gif`
 made from actual Chinese Streamlit UI interactions with synthetic ticket data.
 It covers overall and grouped metrics, a rule citation, SQL handoff and executed
