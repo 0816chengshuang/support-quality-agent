@@ -7,6 +7,17 @@ are historical, not the current acceptance state.
 
 ## Current public presentation (2026-10-25)
 
+The README and design note now use a project-specific SVG business flow in
+place of the generic Mermaid convergence. Its upper branch means exactly one
+task path is selected; its lower rail means any selected path must pass the
+same current-turn evidence gate. The design note contains the complete local
+classification-and-latency example inline, with the separate four-path script
+retained for repetition. The original upstream README had linked its own
+`example/demo.gif`; that historical upstream animation is not evidence for
+this project's business or latency demonstration. This round changes only
+public documentation and diagram assets; no new model run or test result is
+claimed.
+
 The Chinese portfolio now includes Mermaid user/system/latency flows and a
 four-path local latency demonstration. The existing Streamlit page measures
 per-turn in-process total and preparation time with a monotonic clock; it

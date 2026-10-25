@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title description">
+  <title id="title">工单质量分析助手的业务处理路径</title>
+  <desc id="description">用户问题先确认会话和查询条件。条件缺失时澄清并保存；条件齐备时择一进入固定指标、规则检索或原始记录审计。三条路径的实际执行证据经过同一回答门槛后返回用户。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+      <path d="M1 1 L7 4.5 L1 8" fill="none" stroke="#5c746b" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="720" fill="#f7faf8"/>
+  <g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" letter-spacing="0">
+    <text x="50" y="44" fill="#17382f" font-size="23" font-weight="700">从用户问题到可核对结论</text>
+    <text x="50" y="68" fill="#64766e" font-size="13">先确认范围，再择一路径执行；回答只使用本轮证据</text>
+
+    <rect x="50" y="88" width="1100" height="70" rx="6" fill="#173d33"/>
+    <text x="72" y="116" fill="#a7d8c5" font-size="12" font-weight="700">01  输入</text>
+    <text x="72" y="142" fill="#ffffff" font-size="20" font-weight="700">自然语言问题</text>
+    <text x="920" y="132" fill="#d3e7dc" font-size="14">当前会话 · UTC 范围</text>
+    <path d="M600 159 V184" fill="none" stroke="#5c746b" stroke-width="1.7" marker-end="url(#arrow)"/>
+
+    <rect x="50" y="188" width="800" height="74" rx="6" fill="#ffffff" stroke="#cbdad1"/>
+    <rect x="50" y="188" width="6" height="74" rx="3" fill="#248369"/>
+    <text x="74" y="217" fill="#597268" font-size="12" font-weight="700">02  入口校验</text>
+    <text x="74" y="244" fill="#193c32" font-size="19" font-weight="700">确认意图、日期与必要参数</text>
+    <text x="864" y="177" fill="#ac5b40" font-size="12" font-weight="700">条件缺失</text>
+    <path d="M850 225 H892" fill="none" stroke="#b56a4c" stroke-width="1.7" marker-end="url(#arrow)"/>
+    <rect x="900" y="188" width="250" height="74" rx="6" fill="#fff5ec" stroke="#efcfb7"/>
+    <text x="918" y="216" fill="#a65334" font-size="12" font-weight="700">暂停并继续</text>
+    <text x="918" y="242" fill="#473a31" font-size="15" font-weight="700">澄清条件 · 保存检查点</text>
+
+    <text x="468" y="289" fill="#517164" font-size="12" font-weight="700">条件齐备 · 按任务择一路径</text>
+    <path d="M450 263 V309 M230 309 H970" fill="none" stroke="#78958a" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M230 309 V335 M600 309 V335 M970 309 V335" fill="none" stroke="#78958a" stroke-width="1.7" marker-end="url(#arrow)"/>
+
+    <rect x="50" y="342" width="360" height="213" rx="6" fill="#ffffff" stroke="#ceded5"/>
+    <rect x="50" y="342" width="360" height="5" fill="#248369"/>
+    <text x="72" y="372" fill="#248369" font-size="12" font-weight="700">路径 A · 可计算指标</text>
+    <text x="72" y="402" fill="#193c32" font-size="21" font-weight="700">固定指标 Skill</text>
+    <path d="M72 416 H388" stroke="#e4ebe6"/>
+    <text x="72" y="443" fill="#4d6158" font-size="14">日期、类别与指标参数校验</text>
+    <text x="72" y="469" fill="#4d6158" font-size="14">参数化只读 SQL 执行</text>
+    <rect x="72" y="495" width="316" height="38" rx="4" fill="#eaf5ef"/>
+    <text x="86" y="519" fill="#246c53" font-size="13" font-weight="700">证据：分子 / 分母 / 口径版本</text>
+
+    <rect x="420" y="342" width="360" height="213" rx="6" fill="#ffffff" stroke="#d1dce5"/>
+    <rect x="420" y="342" width="360" height="5" fill="#4d7997"/>
+    <text x="442" y="372" fill="#4d7997" font-size="12" font-weight="700">路径 B · 可追溯规则</text>
+    <text x="442" y="402" fill="#233d50" font-size="21" font-weight="700">业务资料检索</text>
+    <path d="M442 416 H758" stroke="#e4ebe6"/>
+    <text x="442" y="443" fill="#4d6158" font-size="14">章节分块与 BM25 检索</text>
+    <text x="442" y="469" fill="#4d6158" font-size="14">命中原文与引用编号核对</text>
+    <rect x="442" y="495" width="316" height="38" rx="4" fill="#edf3f8"/>
+    <text x="456" y="519" fill="#3f6682" font-size="13" font-weight="700">证据：规则片段 / 来源编号</text>
+
+    <rect x="790" y="342" width="360" height="213" rx="6" fill="#ffffff" stroke="#e3d8c9"/>
+    <rect x="790" y="342" width="360" height="5" fill="#b47d3d"/>
+    <text x="812" y="372" fill="#aa7434" font-size="12" font-weight="700">路径 C · 可审计记录</text>
+    <text x="812" y="402" fill="#493b2b" font-size="21" font-weight="700">原始 SQL 审计</text>
+    <path d="M812 416 H1128" stroke="#e4ebe6"/>
+    <text x="812" y="443" fill="#4d6158" font-size="14">主流程交给 Text2SQL 子流程</text>
+    <text x="812" y="469" fill="#4d6158" font-size="14">保留用户范围并只读执行</text>
+    <rect x="812" y="495" width="316" height="38" rx="4" fill="#fbf3e8"/>
+    <text x="826" y="519" fill="#936832" font-size="13" font-weight="700">证据：执行状态 / SQL / 结果</text>
+
+    <text x="546" y="579" fill="#517164" font-size="12" font-weight="700">仅收集实际执行证据</text>
+    <path d="M230 556 V590 M600 556 V590 M970 556 V590 M230 590 H970" fill="none" stroke="#78958a" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M600 590 V613" fill="none" stroke="#78958a" stroke-width="1.7" marker-end="url(#arrow)"/>
+
+    <rect x="50" y="621" width="1100" height="72" rx="6" fill="#e9f0ec" stroke="#cbdad1"/>
+    <text x="72" y="648" fill="#31654f" font-size="12" font-weight="700">03  证据门槛与回答</text>
+    <text x="72" y="676" fill="#193c32" font-size="18" font-weight="700">展示本轮数值、规则出处或真实 SQL；缺条件和失败时明确说明状态</text>
+  </g>
+</svg>
